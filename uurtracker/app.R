@@ -37,7 +37,7 @@ ui <- fluidPage(
                 border-radius:4px; 
                 font-family:monospace;
             }"))),
-    titlePanel("Tiktijden naar uurrooster"),
+    titlePanel("Tiktijden naar gepresteerde uren"),
     sidebarLayout(
         sidebarPanel(        
             selectInput(
@@ -52,7 +52,16 @@ ui <- fluidPage(
                 "Jaar 6 (3761.92 EUR)" = "3761.92"
             ),
             selected = "Jaar 1 (3111.92)"
-        ),        
+        ), 
+        selectInput(
+            "optingout",
+            "Opting Out?",
+            choices = c(
+                "Ja" = "TRUE",
+                "Nee" = "FALSE"
+            ),
+            selected = "TRUE"
+        ),      
             fileInput(
                 inputId = "csvFile",
                 label = "Upload Excel bestand",
@@ -67,8 +76,10 @@ ui <- fluidPage(
             p(strong("opgelet"), "Deze tool is nog volop in ontwikkeling, bevat een aantal bugs en ontbreekt een aantal features."),
             HTML("<ul><li>Met opting out worden de uren > 48u nog niet aan 110% berekend</li>
                  <li>Extramurale wachten kunnen nog niet worden geregistreerd. De 'wacht' kolom wordt nog niet gebruikt in de berekenigen. </li>
-                 <li>Deze tool veronderstelt dat er wordt ingetikt in de voormiddag en uigetikt in de namiddag. Ploegensystemen zijn nog niet getest.</li>
+                 <li>Deze tool veronderstelt dat er wordt ingetikt in de voormiddag en uitgetikt in de namiddag. Ploegensystemen zijn nog niet getest.</li>
                  <li>Feestdagen worden automatisch herkend en worden berekend aan 150%. </li>
+                 <li>Bij verlof wordt er gerekend dat er wordt ingetikt om 8u en uitgetikt om 20u (omdat die uren meetellen voor 'gewerkte' uren om het gemiddelde te berekenen) </li>
+                 <li>Bij recup wordt er gerekend dat er wordt ingetikt om 8u en uitgetikt om 8u (uren tellen niet mee voor gemiddelde of voor loon) </li>
                  <li>Bij een 24 uurswacht die start op zaterdag om 8u wordt er 16u gerekend aan 125% en 8 uur aan 150% (want is op zondagmorgen) (en zondagwacht/maandagmorgen analoog berekend)</li>
                  <li>Het uurloon wordt berekend op de volgende manier: maandloon * 3 / 13 weken / 48 uur.</li></ul>"),
             #strong("strong() makes bold text."),
@@ -97,11 +108,22 @@ server <- function(input, output) {
                                   
                                   maandloon <- as.numeric(input$maandloon)
                                   uurloon <- maandloon*3/13/48
+                                  df$verlof <- ifelse(is.na(df$verlof), FALSE, TRUE)
+                                  df$recup <- ifelse(is.na(df$recup), FALSE, TRUE)
+                                  
+                                  df$ingetikt <- as_datetime(ifelse(df$verlof == TRUE, 
+                                                                    as_datetime(df$dag + hours(8)), 
+                                                                    ifelse(df$recup == TRUE, as_datetime(df$dag + hours(8)), as_datetime(df$ingetikt))))
+                                  df$uitgetikt <- as_datetime(ifelse(df$verlof == TRUE, 
+                                                                     as_datetime(df$dag + hours(20)), 
+                                                                     ifelse(df$recup == TRUE, as_datetime(df$dag + hours(8)), as_datetime(df$uitgetikt))))
                                   
                                   df$in_date <- as.Date(df$ingetikt)
                                   df$in_time <- format(df$ingetikt,"%H:%M:%S")
                                   df$out_date <- as.Date(df$uitgetikt)
                                   df$out_time <- format(df$uitgetikt,"%H:%M:%S")
+                                  
+                                  
                                   #optingout weekuren berekenen
                                   
                                   #op 48u
@@ -162,9 +184,16 @@ server <- function(input, output) {
                                   
                                   df$weekdag <- ifelse(df$feestdag == TRUE , "Sunday", df$weekdag)
                                   
+                                  
+                                  df$hours_worked <- as.double(as_hms((df$uitgetikt-df$ingetikt)))/60/60
+                                  df <- df %>% group_by(week = week(dag)) %>% mutate(uren_gewerkt_per_week = sum(hours_worked)) %>% 
+                                      ungroup()
+                                  
+                                  df %>% group_by(week = week(dag)) %>% summarize(uren_gewerkt_per_week = sum(hours_worked))
+                                  
                                   row <- apply(df, 1, function(row){
                                       return(row)})
-                                  row <- row[,2]
+                                  row <- row[,5]
                                   
                                   calc <- apply(df, 1, function(row){
                                       uitgetikt <- as_datetime(row["uitgetikt"]) #%>% pull(uitgetikt)
@@ -202,7 +231,7 @@ server <- function(input, output) {
                                           row["comfortabele_uren"] = as.double(as_hms((comf_uur_stop-comf_uur_start)))/60/60
                                           row["bruto_comfortabele_uren_euro"] <- round(as.double(row["comfortabele_uren"])*uurloon,2)
                                           
-                                          row["oncomfortabele_uren"] = as.double(as_hms((comf_uur_start-ingetikt)))/60/60 + as.double(as_hms((comf_uur_stop-uitgetikt)))/60/60 
+                                          row["oncomfortabele_uren"] = as.double(as_hms((comf_uur_start-ingetikt)))/60/60 + as.double(as_hms((uitgetikt + comf_uur_stop)))/60/60 
                                           row["bruto_oncomfortabele_uren_euro"] <- round(as.double(row["oncomfortabele_uren"])*uurloon*1.25,2)
                                           
                                       }else if ((weekdag %in% c("Saturday"))) {
@@ -247,13 +276,14 @@ server <- function(input, output) {
                                   
                                   totaal <- calc %>% t()
                                   totaal <- data.frame(totaal)
+                                  #totaal$bruto_comfortabele_uren_euro <- ifelse(df$verlof == TRUE, 0, totaal$bruto_comfortabele_uren_euro )
+                                  #totaal$bruto_oncomfortabele_uren_euro <- ifelse(df$verlof == TRUE, 0, totaal$bruto_oncomfortabele_uren_euro )
                                   totaal$som_bruto <- as.double(totaal$bruto_comfortabele_uren_euro) + as.double(totaal$bruto_oncomfortabele_uren_euro)
-                                  totaal <- totaal %>% select(dag, ingetikt, uitgetikt, weekdag, feestdag, comfortabele_uren,
+                                  totaal <- totaal %>% select(dag, ingetikt, uitgetikt, weekdag, verlof, recup, feestdag, comfortabele_uren,
                                                               bruto_comfortabele_uren_euro,
-                                                              oncomfortabele_uren, bruto_oncomfortabele_uren_euro, som_bruto)
+                                                              oncomfortabele_uren, bruto_oncomfortabele_uren_euro, som_bruto, uren_gewerkt_per_week)
                                   
                                   totaal
-                                  
                               }) 
     
     output$modifiedData <-  DT::renderDataTable({userData()})

@@ -1,15 +1,30 @@
 library(tidyverse)
 library(readxl)
 library(lubridate)
+library(hms)
 
 maandloon <- 3611
 uurloon <- maandloon*3/13/48
 
-df <- read_excel("/Users/rmvpaeme/Desktop/uurschema.xlsx")
+df <- read_excel("/Users/rmvpaeme/Downloads/uurschema_voorbeeld.xlsx")
+df <- read_excel("/Users/rmvpaeme/uurtracker/urenlijst_test.xlsx")
+
+df$verlof <- ifelse(is.na(df$verlof), FALSE, TRUE)
+df$recup <- ifelse(is.na(df$recup), FALSE, TRUE)
+
+df$ingetikt <- as_datetime(ifelse(df$verlof == TRUE, 
+                                  as_datetime(df$dag + hours(8)), 
+                                  ifelse(df$recup == TRUE, as_datetime(df$dag + hours(8)), as_datetime(df$ingetikt))))
+df$uitgetikt <- as_datetime(ifelse(df$verlof == TRUE, 
+                                  as_datetime(df$dag + hours(20)), 
+                                  ifelse(df$recup == TRUE, as_datetime(df$dag + hours(8)), as_datetime(df$uitgetikt))))
+
 df$in_date <- as.Date(df$ingetikt)
 df$in_time <- format(df$ingetikt,"%H:%M:%S")
 df$out_date <- as.Date(df$uitgetikt)
 df$out_time <- format(df$uitgetikt,"%H:%M:%S")
+
+
 #optingout weekuren berekenen
 
 #op 48u
@@ -70,9 +85,16 @@ df$feestdag <- ifelse(as.Date(df$dag) %in% feestdagen, TRUE, FALSE)
 
 df$weekdag <- ifelse(df$feestdag == TRUE , "Sunday", df$weekdag)
 
+
+df$hours_worked <- as.double(as_hms((df$uitgetikt-df$ingetikt)))/60/60
+df <- df %>% group_by(week = week(dag)) %>% mutate(uren_gewerkt_per_week = sum(hours_worked)) %>% 
+  ungroup()
+
+df %>% group_by(week = week(dag)) %>% summarize(uren_gewerkt_per_week = sum(hours_worked))
+
 row <- apply(df, 1, function(row){
   return(row)})
-row <- row[,2]
+row <- row[,5]
 
 calc <- apply(df, 1, function(row){
   uitgetikt <- as_datetime(row["uitgetikt"]) #%>% pull(uitgetikt)
@@ -110,7 +132,7 @@ calc <- apply(df, 1, function(row){
       row["comfortabele_uren"] = as.double(as_hms((comf_uur_stop-comf_uur_start)))/60/60
       row["bruto_comfortabele_uren_euro"] <- round(as.double(row["comfortabele_uren"])*uurloon,2)
       
-      row["oncomfortabele_uren"] = as.double(as_hms((comf_uur_start-ingetikt)))/60/60 + as.double(as_hms((comf_uur_stop-uitgetikt)))/60/60 
+      row["oncomfortabele_uren"] = as.double(as_hms((comf_uur_start-ingetikt)))/60/60 + as.double(as_hms((uitgetikt + comf_uur_stop)))/60/60 
       row["bruto_oncomfortabele_uren_euro"] <- round(as.double(row["oncomfortabele_uren"])*uurloon*1.25,2)
       
     }else if ((weekdag %in% c("Saturday"))) {
@@ -155,9 +177,13 @@ calc <- apply(df, 1, function(row){
 
 totaal <- calc %>% t()
 totaal <- data.frame(totaal)
+#totaal$bruto_comfortabele_uren_euro <- ifelse(df$verlof == TRUE, 0, totaal$bruto_comfortabele_uren_euro )
+#totaal$bruto_oncomfortabele_uren_euro <- ifelse(df$verlof == TRUE, 0, totaal$bruto_oncomfortabele_uren_euro )
 totaal$som_bruto <- as.double(totaal$bruto_comfortabele_uren_euro) + as.double(totaal$bruto_oncomfortabele_uren_euro)
-totaal <- totaal %>% select(dag, ingetikt, uitgetikt, weekdag, feestdag, comfortabele_uren,
+totaal <- totaal %>% select(dag, ingetikt, uitgetikt, weekdag, verlof, recup, feestdag, comfortabele_uren,
                   bruto_comfortabele_uren_euro,
-                  oncomfortabele_uren, bruto_oncomfortabele_uren_euro, som_bruto)
+                  oncomfortabele_uren, bruto_oncomfortabele_uren_euro, som_bruto, uren_gewerkt_per_week)
+
+totaal
 
   

@@ -1,0 +1,11 @@
+name: uurtracker
+title:
+username:
+account: rubenvp
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4923658
+bundleId: 5162423
+url: https://rubenvp.shinyapps.io/uurtracker/
+when: 1634822365.08703
+lastSyncTime: 1634822365.08705
