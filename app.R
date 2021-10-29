@@ -47,7 +47,7 @@ ui <- fluidPage(
             choices = c(
                 "Jaar 1 (3111.92 EUR)" = "3111.92",
                 "Jaar 2 (3211.92 EUR)" = "3211.92",
-                "Jaar 3 (3211.92 EUR)" = "3211.92",
+                "Jaar 3 (3336.92  EUR)" = "3336.92", #
                 "Jaar 4 (3461.92 EUR)" = "3461.92",
                 "Jaar 5 (3611.92 EUR)" = "3611.92",
                 "Jaar 6 (3761.92 EUR)" = "3761.92"
@@ -66,7 +66,8 @@ ui <- fluidPage(
             fileInput(
                 inputId = "csvFile",
                 label = "Upload Excel bestand",
-                accept = c(".xlsx"))),
+                accept = c(".xlsx")),
+        downloadButton('download',"Download the data")),
         mainPanel(
             p("Deze tool zet een Excel bestand met tiktijden om in een nieuwe Excel tabel waar de
                comfortabele en oncomfortabele uren worden berekend op basis van tiktijden, samen met het brutoloon."),
@@ -82,19 +83,20 @@ ui <- fluidPage(
                  <li>Feestdagen worden automatisch herkend en worden berekend aan 150%. </li>
                  <li>Bij verlof wordt er gerekend dat er wordt ingetikt om 8u en uitgetikt om 18u (omdat die uren meetellen voor 'gewerkte' uren om het gemiddelde te berekenen) </li>
                  <li>Bij een 24 uurswacht die start op zaterdag om 8u wordt er 16u gerekend aan 125% en 8 uur aan 150% (want is op zondagmorgen) (en zondagwacht/maandagmorgen analoog berekend)</li>
-                 <li>Het aantal gewerkte uren per week wordt gereset op de nacht van zo op ma om 00:00</li>
                  <li>Het uurloon wordt berekend op de volgende manier: maandloon * 3 / 13 weken / 48 uur.</li></ul>"),
             #strong("strong() makes bold text."),
             #em("em() creates italicized (i.e, emphasized) text."),
         )
-    ),
-    # Show a plot of the generated distribution
-    mainPanel(
-
-        downloadButton('download',"Download the data"),
-        DT::dataTableOutput("modifiedData")
+    ),    mainPanel(
         
-    )
+        DT::dataTableOutput("modifiedData"),
+        hr(),
+        p("Deze tool is puur indicatief en exacte berekeningen kunnen verschillen. De gebruiker is zelf verantwoordelijk om de accuraatheid van de berekeningen te verifiëren. De volledige broncode met berekeningen is te vinden op https://github.com/rmvpaeme/tiktijden/"),
+        
+    ),
+    # WHERE YOUR FOOTER GOES
+    # Show a plot of the generated distribution
+
 )
 
 server <- function(input, output) {
